@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template, redirect, url_for, flash, session
 import pyodbc
 import jwt
 from dotenv import load_dotenv
@@ -17,60 +17,91 @@ connection_string1 = os.getenv("CONNECTION_STRING1")
 connection_string2 = os.getenv("CONNECTION_STRING2")
 
 
-SECRET_KEY = 'zaldivar20240311'
+app.secret_key = 'zaldivar20240311'
 #TOKEN_EXPIRATION_MINUTES = 60
 
 # configuramos zona horaria local con pytz
 local_time = pytz.timezone('America/Argentina/Buenos_Aires')
 
 
-@app.route('/api/login', methods=['POST'])
-
+@app.route('/login', methods=['GET', 'POST'])
 def login():
- username = request.form.get('username')
- password = request.form.get('password')
- 
-   # Validar usuario y contrase�a
- usuario = Lee_Usuario(username)
- user_id = usuario [0]
- nombre = usuario[1]
- rol = usuario [3]
- pasw = usuario[2]
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        # Validar usuario y contraseña
+        usuario = Lee_Usuario(username)
+        
+        if not usuario:
+            flash("Usuario no encontrado", "danger")
+            return render_template('login.html')
+        
+        user_id = usuario[0]
+        nombre = usuario[1]
+        pasw = usuario[2]
+        rol = usuario[3]
 
- # Verifica la contraseña ingresada
- if not bcrypt.checkpw(password.encode('utf-8'), pasw.encode('utf-8')):
-    return jsonify({"status": "error", "message": "Contraseña incorrecta"}), 401
- 
- # Calcula fechas
- fecha_creacion = datetime.datetime.now(local_time)
- fecha_expiracion = fecha_creacion + datetime.timedelta(minutes=60)
+        # Verifica la contraseña ingresada
+        if not bcrypt.checkpw(password.encode('utf-8'), pasw.encode('utf-8')):
+            flash("Contraseña incorrecta", "danger")
+            return render_template('login.html')
+        
+        # Calcula fechas
+        fecha_creacion = datetime.datetime.now(local_time)
+        fecha_expiracion = fecha_creacion + datetime.timedelta(minutes=60)
 
- privatekey = {
-    "usuario_id": user_id,
-    "nombre": nombre,
-    "rol": rol,
-    #"password": password,
-    "exp": fecha_expiracion
- }
- print (privatekey)
- token = jwt.encode(privatekey, SECRET_KEY, algorithm='HS256')
- print(token)
- guardar_token(user_id, token, fecha_creacion, fecha_expiracion)
- return (token)
+        # Generar token JWT (si es necesario)
+        privatekey = {
+            "usuario_id": user_id,
+            "nombre": nombre,
+            "rol": rol,
+            "exp": fecha_expiracion
+        }
+        token = jwt.encode(privatekey, app.secret_key, algorithm='HS256')
+        guardar_token(user_id, token, fecha_creacion, fecha_expiracion)
 
+        # Guarda el usuario en la sesión
+        session['usuario'] = {
+            "user_id": user_id,
+            "nombre": nombre,
+            "rol": rol
+        }
+        
+        flash("Inicio de sesión exitoso", "success")
+        # Redirige a una página de inicio o panel de control
+        return redirect(url_for('dashboard'))
 
-@app.route('/api/newusers', methods=['POST'])
+    # Si es un GET, simplemente renderiza el formulario de inicio de sesión
+    return render_template('login.html')
 
+#registro de nuevo usuario
+@app.route('/register', methods=['GET', 'POST'])
 def register():
-  new_user = request.get_json()
+    if request.method == 'POST':
+        new_user = request.form
+        # Verifica si los datos se están recibiendo correctamente
+        if not new_user:
+            flash("Datos no recibidos o en formato incorrecto", "danger")
+            return render_template('register.html')
+        
+        activo = 1 if new_user.get('activo', False) == 'on' else 0
 
-  # Verifica si los datos se están recibiendo correctamente
-  if not new_user:
-      return jsonify({"status": "error", "message": "Datos no recibidos o en formato incorrecto"}), 400 
+        # Inserta el usuario en la base de datos
+        Insert_usuario(new_user['username'], new_user['password'], new_user['rol'], activo)
 
-  Insert_usuario(new_user['username'], new_user['password'], new_user['rol'], new_user['activo'])
+        flash("Usuario creado con éxito", "success")
+        return redirect(url_for('login'))
+    
+    # Si es un GET, simplemente renderiza el formulario de registro
+    return render_template('register.html')
 
-  return jsonify({"status": "success", "message": "Usuario creado con éxito", "usuario nuevo": new_user}), 201
+#pagina principal posterior alogin
+@app.route('/dashboard')
+def dashboard():
+    usuario = session.get('usuario')
+    return render_template('dashboard.html', usuario=usuario)
+
 
 
 @app.route('/turnos/proximo/<historia_clinica>')
@@ -138,7 +169,7 @@ def datos_paciente():
     usuario = request.args.get("usuario")
 
     try:
-        decoded_token = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        decoded_token = jwt.decode(token, app.secret_key, algorithms=['HS256'])
      
     except jwt.ExpiredSignatureError:
         return jsonify({'error': 'Token expirado'}), 401

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <h2 class="text-center mb-4">Panel de Control</h2>
+            <div class="card">
+                <div class="card-body">
+                    <p class="text-center">Bienvenido al Dashboard {{ usuario.nombre }}</p>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <div class="card">
+                                <div class="card-body text-center">
+                                    <h5 class="card-title">Sección 1</h5>
+                                    <p class="card-text">Descripción breve de esta sección.</p>
+                                    <a href="#" class="btn btn-primary">Ir</a>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <div class="card">
+                                <div class="card-body text-center">
+                                    <h5 class="card-title">Sección 2</h5>
+                                    <p class="card-text">Descripción breve de esta sección.</p>
+                                    <a href="#" class="btn btn-primary">Ir</a>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <div class="card">
+                                <div class="card-body text-center">
+                                    <h5 class="card-title">Sección 3</h5>
+                                    <p class="card-text">Descripción breve de esta sección.</p>
+                                    <a href="#" class="btn btn-primary">Ir</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
