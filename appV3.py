@@ -1,11 +1,12 @@
-from flask import Flask, jsonify, request, render_template, redirect, url_for, flash, session
-import pyodbc
-import jwt
-from dotenv import load_dotenv
-import os
-import datetime
-import pytz
-import bcrypt
+from flask import Flask, jsonify, request, render_template, redirect, url_for, flash, session #manejo de sesiones, redirecciones, mensajes en pantalla, respuesta del servidor, json
+from functools import wraps #utilizacion de decoradores(middlewares)
+import pyodbc #db
+import jwt #token
+from dotenv import load_dotenv #variables de entorno
+import os #variables de entorno
+import datetime #manejo de fechas
+import pytz #hora local
+import bcrypt #encriptador de contraseñas
 
 # Cargar las variables de entorno desde el archivo .env
 load_dotenv()
@@ -22,6 +23,16 @@ app.secret_key = 'zaldivar20240311'
 
 # configuramos zona horaria local con pytz
 local_time = pytz.timezone('America/Argentina/Buenos_Aires')
+
+#middleware que verifica si al entrar a una ruta el token sigue activo
+def requires_active_session(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        resultado = Verificar_session()  # Verifica si el token es válido
+        if resultado:  # Si la verificación falla, se redirige al login
+            return resultado
+        return f(*args, **kwargs)  # Si la sesión es válida, continua con la ruta
+    return decorated_function
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -49,7 +60,7 @@ def login():
         
         # Calcula fechas
         fecha_creacion = datetime.datetime.now(local_time)
-        fecha_expiracion = fecha_creacion + datetime.timedelta(minutes=60)
+        fecha_expiracion = fecha_creacion + datetime.timedelta(minutes=1)
 
         # Generar token JWT (si es necesario)
         privatekey = {
@@ -75,6 +86,14 @@ def login():
     # Si es un GET, simplemente renderiza el formulario de inicio de sesión
     return render_template('login.html')
 
+
+#cerrar sesión
+@app.route('/logout')
+def logout():
+    session.pop('usuario', None)  # Elimina el usuario de la sesión
+    flash("Has cerrado sesión", "info")
+    return redirect(url_for('login'))
+
 #registro de nuevo usuario
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -85,6 +104,7 @@ def register():
             flash("Datos no recibidos o en formato incorrecto", "danger")
             return render_template('register.html')
         
+        # Si el usuario se registra como activo se coloca 1 en la db
         activo = 1 if new_user.get('activo', False) == 'on' else 0
 
         # Inserta el usuario en la base de datos
@@ -96,12 +116,54 @@ def register():
     # Si es un GET, simplemente renderiza el formulario de registro
     return render_template('register.html')
 
-#pagina principal posterior alogin
+#pagina principal posterior a login
 @app.route('/dashboard')
 def dashboard():
     usuario = session.get('usuario')
     return render_template('dashboard.html', usuario=usuario)
 
+# Perfil del usuario
+@app.route('/perfil')
+@requires_active_session
+def perfil():
+    usuario = session.get('usuario')
+    return render_template('perfil.html', usuario=usuario)
+    
+
+#función que verifica si el token sigue activo
+def Verificar_session():
+   usuario = session.get('usuario')
+   usuario_id = usuario.get('user_id')
+    
+   # Verifica si el usuario está en sesión
+   if not usuario:
+     flash("Debes iniciar sesión", "danger")
+     return redirect(url_for('login'))
+    
+   with pyodbc.connect(connection_string2) as connection:
+    cursor = connection.cursor()
+
+    sql = """
+     SELECT top 1 usuario_id, token 
+     FROM tokens t 
+     WHERE usuario_id = ? 
+     ORDER BY fecha_expiracion DESC
+     """
+    cursor.execute(sql, [usuario_id])
+    token = cursor.fetchone()
+
+    # Verifica si el token es válido y no ha expirado
+    if token and Verificar_token_session(token[1]):
+        # Si el token es válido, carga la página de perfil
+        return render_template('perfil.html', usuario=usuario)
+    else:
+        # Limpiar la sesión
+        session.clear()
+        # Colocar el mensaje
+        flash("Tu sesión ha expirado, por favor vuelve a iniciar sesión", "warning")
+        #Redireccionar al login
+        return redirect(url_for('login'))
+    
 
 
 @app.route('/turnos/proximo/<historia_clinica>')
@@ -229,9 +291,44 @@ def Insert_usuario (username, password, rol, activo):
     cursor.close()
 
 
+def Verificar_token_session(token):
+    try:
+        # Decodificar el token
+        decoded_token = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+
+        with pyodbc.connect(connection_string2) as connection:
+            cursor = connection.cursor()
+
+            # Verificar la fecha de expiración en la base de datos
+            sql = """
+                SELECT fecha_expiracion FROM tokens WHERE token = ? 
+            """
+            cursor.execute(sql, [token])
+            fecha_expiracion = cursor.fetchone()
+            
+            if fecha_expiracion:
+                fecha_expiracion = fecha_expiracion[0]
+                print(fecha_expiracion)
+
+                # Verificar si la fecha de expiración es mayor que la fecha actual
+                if datetime.datetime.now() < fecha_expiracion:
+                    print("Token válido")
+                    return True
+                else:
+                    print("Token expirado")
+                    return False
+            else:
+                print("No se encontró fecha de expiración")
+                return False
+    except Exception as e:
+        print("Error al verificar el token:", e)
+        return False
+
+
+
+
 if __name__ == '__main__':
-  #app.run(debug=True)
-  app.run(host="0.0.0.0")
+  app.run(debug=True, host="0.0.0.0")
 
 
 

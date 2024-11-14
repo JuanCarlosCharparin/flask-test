@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+
+{% block title %}Perfil del Usuario{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">Perfil del Usuario</h4>
+                </div>
+                <div class="card-body">
+                    {% if usuario %}
+                        <p><strong>Nombre:</strong> {{ usuario.nombre }}</p>
+                        <p><strong>Id:</strong> {{ usuario.user_id }}</p>
+                    {% else %}
+                        <p class="text-danger">No se encontraron datos del usuario.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
